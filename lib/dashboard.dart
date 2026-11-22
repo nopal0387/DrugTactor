@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'scanner_screen.dart';
 import 'medication_detail_screen.dart';
+import 'main.dart'; // 👈 IMPORTANT: Import main.dart to access LoginScreen
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -68,8 +69,17 @@ class DashboardScreen extends StatelessWidget {
             icon: const Icon(Icons.logout),
             tooltip: 'Logout',
             onPressed: () async {
+              // 1. Sign out from Firebase
               await FirebaseAuth.instance.signOut();
-              if (context.mounted) Navigator.pop(context);
+              
+              // 2. Navigate back to Login Screen and clear all history
+              if (context.mounted) {
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (context) => const LoginScreen()),
+                  (Route<dynamic> route) => false, // This clears the back stack
+                );
+              }
             },
           )
         ],
@@ -117,17 +127,16 @@ class DashboardScreen extends StatelessWidget {
                     final medData = meds[index].data() as Map<String, dynamic>;
                     final docId = meds[index].id;
                     
-                    String titleText = 'Unknown Medication';
-                    if (medData['rawText'] != null) {
-                      final lines = medData['rawText'].toString().split('\n');
-                      if (lines.isNotEmpty && lines.first.trim().isNotEmpty) {
-                        titleText = lines.first.trim();
-                      }
-                    }
-
                     String aiSummary = medData['aiSummary'] ?? 'No AI summary available.';
                     if (aiSummary.trim().isEmpty) {
                       aiSummary = 'No AI summary available.';
+                    }
+
+                    String titleText = "Medication Details";
+                    if (aiSummary.contains('\n')) {
+                      titleText = aiSummary.split('\n').first;
+                    } else {
+                      titleText = aiSummary.length > 30 ? "${aiSummary.substring(0, 30)}..." : aiSummary;
                     }
 
                     return Card(
@@ -163,7 +172,6 @@ class DashboardScreen extends StatelessWidget {
                               ),
                             ),
                           ),
-                          // 👁️ VIEW DETAIL NAVIGATION
                           onTap: () {
                             Navigator.push(
                               context,
@@ -172,7 +180,6 @@ class DashboardScreen extends StatelessWidget {
                               ),
                             );
                           },
-                          // 🗑️ DELETE BUTTON
                           trailing: IconButton(
                             icon: const Icon(Icons.delete_outline, color: Colors.red),
                             tooltip: 'Delete Medication',
