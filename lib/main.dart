@@ -3,7 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
 import 'dashboard.dart';
-import 'register_screen.dart'; // 👈 Import the new Register Screen
+import 'register_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -95,7 +95,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 color: Colors.white,
                 borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
               ),
-              child: Padding(
+              // 👇 FIX: Added SingleChildScrollView to prevent keyboard overflow
+              child: SingleChildScrollView(
                 padding: const EdgeInsets.all(32.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -124,7 +125,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 16),
                     Center(
                       child: TextButton(
-                        // 👇 THIS NOW NAVIGATES TO THE NEW REGISTER PAGE
                         onPressed: _isLoading ? null : () {
                           Navigator.push(context, MaterialPageRoute(builder: (context) => const RegisterScreen()));
                         },
@@ -137,7 +137,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     ),
-                    const Spacer(),
+                    // 👇 FIX: Replaced Spacer() with a fixed SizedBox (Spacer doesn't work in ScrollView)
+                    const SizedBox(height: 40),
                     const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [

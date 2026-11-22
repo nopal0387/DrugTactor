@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dashboard.dart';
-import 'main.dart'; // For colors
+import 'main.dart'; 
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -21,7 +21,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _obscureConfirmPassword = true;
 
   Future<void> _register() async {
-    // 1. Validate the form first
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
@@ -33,7 +32,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
       
       if (mounted) {
-        // Navigate to Dashboard and clear history
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (context) => const DashboardScreen()),
@@ -57,7 +55,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
       backgroundColor: kTeal,
       body: Stack(
         children: [
-          // Teal Background with Logo
           Positioned(
             top: 0, left: 0, right: 0, height: MediaQuery.of(context).size.height * 0.25,
             child: SafeArea(
@@ -66,7 +63,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 children: [
                   Image.asset(
                     'assets/logo_new.png',
-                    height: 100, // Slightly smaller on register page to fit fields
+                    height: 100, 
                     fit: BoxFit.contain,
                   ),
                 ],
@@ -74,7 +71,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ),
           ),
           
-          // White Bottom Sheet
           Positioned(
             top: MediaQuery.of(context).size.height * 0.22,
             left: 0, right: 0, bottom: 0,
@@ -83,96 +79,90 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 color: Colors.white,
                 borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
               ),
-              child: Padding(
+              // 👇 FIX: Added SingleChildScrollView
+              child: SingleChildScrollView(
                 padding: const EdgeInsets.all(32.0),
                 child: Form(
                   key: _formKey,
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Create Account', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: kTextDark)),
-                        const SizedBox(height: 8),
-                        const Text('Register to start tracking your medications.', style: TextStyle(color: kTextLight)),
-                        const SizedBox(height: 24),
-                        
-                        // Email Field
-                        _buildTextField(
-                          label: 'Email', 
-                          hint: 'you@example.com', 
-                          icon: Icons.email_outlined, 
-                          controller: _emailController,
-                          validator: (value) {
-                            if (value == null || value.isEmpty) return 'Email is required';
-                            if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) return 'Enter a valid email';
-                            return null;
-                          }
-                        ),
-                        const SizedBox(height: 16),
-                        
-                        // Password Field
-                        _buildTextField(
-                          label: 'Password', 
-                          hint: 'Minimum 8 characters', 
-                          icon: Icons.lock_outline, 
-                          controller: _passwordController, 
-                          isPassword: true,
-                          validator: (value) {
-                            if (value == null || value.isEmpty) return 'Password is required';
-                            if (value.length < 8) return 'Password must be at least 8 characters';
-                            return null;
-                          }
-                        ),
-                        const SizedBox(height: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Create Account', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: kTextDark)),
+                      const SizedBox(height: 8),
+                      const Text('Register to start tracking your medications.', style: TextStyle(color: kTextLight)),
+                      const SizedBox(height: 24),
+                      
+                      _buildTextField(
+                        label: 'Email', 
+                        hint: 'you@example.com', 
+                        icon: Icons.email_outlined, 
+                        controller: _emailController,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) return 'Email is required';
+                          if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) return 'Enter a valid email';
+                          return null;
+                        }
+                      ),
+                      const SizedBox(height: 16),
+                      
+                      _buildTextField(
+                        label: 'Password', 
+                        hint: 'Minimum 8 characters', 
+                        icon: Icons.lock_outline, 
+                        controller: _passwordController, 
+                        isPassword: true,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) return 'Password is required';
+                          if (value.length < 8) return 'Password must be at least 8 characters';
+                          return null;
+                        }
+                      ),
+                      const SizedBox(height: 16),
 
-                        // Confirm Password Field
-                        _buildTextField(
-                          label: 'Confirm Password', 
-                          hint: 'Re-enter your password', 
-                          icon: Icons.lock_reset, 
-                          controller: _confirmPasswordController, 
-                          isPassword: true,
-                          isConfirm: true,
-                          validator: (value) {
-                            if (value == null || value.isEmpty) return 'Please confirm your password';
-                            if (value != _passwordController.text) return 'Passwords do not match';
-                            return null;
-                          }
-                        ),
-                        
-                        const SizedBox(height: 32),
-                        
-                        // Register Button
-                        SizedBox(
-                          width: double.infinity, height: 55,
-                          child: ElevatedButton(
-                            onPressed: _isLoading ? null : _register,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: kTeal, foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                            ),
-                            child: _isLoading 
-                              ? const CircularProgressIndicator(color: Colors.white) 
-                              : const Text('Register', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      _buildTextField(
+                        label: 'Confirm Password', 
+                        hint: 'Re-enter your password', 
+                        icon: Icons.lock_reset, 
+                        controller: _confirmPasswordController, 
+                        isPassword: true,
+                        isConfirm: true,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) return 'Please confirm your password';
+                          if (value != _passwordController.text) return 'Passwords do not match';
+                          return null;
+                        }
+                      ),
+                      
+                      const SizedBox(height: 32),
+                      
+                      SizedBox(
+                        width: double.infinity, height: 55,
+                        child: ElevatedButton(
+                          onPressed: _isLoading ? null : _register,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: kTeal, foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
                           ),
+                          child: _isLoading 
+                            ? const CircularProgressIndicator(color: Colors.white) 
+                            : const Text('Register', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                         ),
-                        const SizedBox(height: 16),
-                        
-                        // Back to Login
-                        Center(
-                          child: TextButton(
-                            onPressed: _isLoading ? null : () => Navigator.pop(context),
-                            child: RichText(
-                              text: const TextSpan(
-                                text: "Already have an account? ",
-                                style: TextStyle(color: kTextLight),
-                                children: [TextSpan(text: "Log in here", style: TextStyle(color: kTeal, fontWeight: FontWeight.bold))],
-                              ),
+                      ),
+                      const SizedBox(height: 16),
+                      
+                      Center(
+                        child: TextButton(
+                          onPressed: _isLoading ? null : () => Navigator.pop(context),
+                          child: RichText(
+                            text: const TextSpan(
+                              text: "Already have an account? ",
+                              style: TextStyle(color: kTextLight),
+                              children: [TextSpan(text: "Log in here", style: TextStyle(color: kTeal, fontWeight: FontWeight.bold))],
                             ),
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
