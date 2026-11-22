@@ -5,14 +5,12 @@ import 'package:camera/camera.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart' as img_picker;
-// 👇 Hide Container to avoid conflict with Flutter's Container widget
 import 'package:openai_dart/openai_dart.dart' hide Container;
-
 import 'secrets.dart';
+import 'main.dart'; // For colors
 
 class ScannerScreen extends StatefulWidget {
   const ScannerScreen({super.key});
-
   @override
   State<ScannerScreen> createState() => _ScannerScreenState();
 }
@@ -21,16 +19,16 @@ class _ScannerScreenState extends State<ScannerScreen> {
   CameraController? _cameraController;
   List<CameraDescription>? _cameras;
   bool _isProcessing = false;
-
-  String _aiSummary = "Point camera at a medicine label and press the button.";
+  String _aiSummary = "";
+  bool _hasScanned = false;
 
   @override
   void initState() {
     super.initState();
-    _initializeCamera();
+    _initCamera();
   }
 
-  Future<void> _initializeCamera() async {
+  Future<void> _initCamera() async {
     _cameras = await availableCameras();
     if (_cameras!.isNotEmpty) {
       _cameraController = CameraController(_cameras![0], ResolutionPreset.high);
@@ -45,199 +43,206 @@ class _ScannerScreenState extends State<ScannerScreen> {
     super.dispose();
   }
 
-  // 🧠 AI Generation with Groq Vision (Corrected API)
-  Future<void> _generateAISummaryFromImage(File imageFile) async {
-    setState(() {
-      _aiSummary = "🧠 Groq is analyzing the image...";
-    });
-
+  Future<void> _processImage(File imageFile) async {
+    setState(() { _isProcessing = true; _hasScanned = true; _aiSummary = "Analyzing image..."; });
     try {
-      // 1. Read the image file and convert it to Base64
       final bytes = await imageFile.readAsBytes();
       final base64Image = base64Encode(bytes);
-
-      // 2. Initialize the OpenAI client for Groq
-      final client = OpenAIClient(
-        config: OpenAIConfig(
-          authProvider: ApiKeyProvider(groqApiKey),
-          baseUrl: 'https://api.groq.com/openai/v1',
-        ),
-      );
-
-      // 3. Build the prompt
+      final client = OpenAIClient(config: OpenAIConfig(authProvider: ApiKeyProvider(groqApiKey), baseUrl: 'https://api.groq.com/openai/v1'));
+      
       final prompt = """
-      You are a helpful medical assistant. Analyze the image of this medicine packaging.
-      Provide a brief, clear summary with exactly these three points:
-      1. Function: What is this medicine used for?
-      2. Dosage: How many times per day?
-      3. Instructions: When to take it (e.g., before food, after food)?
-      Keep it short and easy to read. If the image is too blurry to read, just say "Image unclear, please retake."
+      Analyze this medicine image. Provide the summary in EXACTLY this format, one per line:
+      Name: [Medicine Name]
+      Function: [What it is used for, max 5 words]
+      Dosage: [How often]
+      Instructions: [How to take it]
       """;
 
-      // 4. Send the request using the correct `ChatMessage` and `ContentPart` API
       final response = await client.chat.completions.create(
         ChatCompletionCreateRequest(
-          model: 'qwen/qwen3.8-27b', // Groq's fast, free vision model
-          maxTokens: 500,
-          messages: [
-            // 👇 Use ChatMessage.user with a list of ContentParts
-            ChatMessage.user([
-              ContentPart.text(prompt),
-              ContentPart.imageBase64(
-                data: base64Image,
-                mediaType: 'image/jpeg', // Or 'image/png'
-              ),
-            ]),
-          ],
+          model: 'qwen/qwen3.8-27b',
+          maxTokens: 300,
+          messages: [ChatMessage.user([ContentPart.text(prompt), ContentPart.imageBase64(data: base64Image, mediaType: 'image/jpeg')])],
         ),
       );
 
-      // 5. Update the UI with the result
-      setState(() {
-        _aiSummary = response.choices.first.message.content ?? "Could not generate AI summary.";
-      });
-
+      setState(() => _aiSummary = response.choices.first.message.content ?? "Error reading image.");
     } catch (e) {
-      setState(() {
-        _aiSummary = "Error: $e";
-      });
+      setState(() => _aiSummary = "Error: $e");
     } finally {
-      setState(() {
-        _isProcessing = false;
-      });
+      setState(() => _isProcessing = false);
     }
   }
 
-  // 📸 Process Image (From Camera or Gallery)
-  Future<void> _processImage(File imageFile) async {
-    setState(() {
-      _isProcessing = true;
-      _aiSummary = "Preparing image for AI...";
-    });
-    await _generateAISummaryFromImage(imageFile);
-  }
-
-  // 📷 Take Photo
-  Future<void> _scanImage() async {
+  Future<void> _takePicture() async {
     if (_cameraController == null || !_cameraController!.value.isInitialized) return;
-    final XFile picture = await _cameraController!.takePicture();
-    _processImage(File(picture.path));
+    final pic = await _cameraController!.takePicture();
+    _processImage(File(pic.path));
   }
 
-  // 🖼️ Pick from Gallery
-  Future<void> _pickFromGallery() async {
-    final img_picker.ImagePicker picker = img_picker.ImagePicker();
-    final XFile? image = await picker.pickImage(source: img_picker.ImageSource.gallery);
-    if (image != null) {
-      _processImage(File(image.path));
-    }
+  Future<void> _pickGallery() async {
+    final image = await img_picker.ImagePicker().pickImage(source: img_picker.ImageSource.gallery);
+    if (image != null) _processImage(File(image.path));
   }
 
-  // 💾 Save to Database
   Future<void> _saveToDatabase() async {
-    if (_aiSummary.contains("Point camera") || _aiSummary.contains("Error")) return;
-    setState(() { _isProcessing = true; });
-
+    if (_aiSummary.contains("Error")) return;
+    setState(() => _isProcessing = true);
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .collection('medications')
-            .add({
-          'aiSummary': _aiSummary,
-          'timestamp': FieldValue.serverTimestamp(),
-        });
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Medication saved successfully!')),
-          );
-          Navigator.pop(context);
-        }
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      await FirebaseFirestore.instance.collection('users').doc(FirebaseAuth.instance.currentUser!.uid).collection('medications').add({
+        'aiSummary': _aiSummary,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+      if (mounted) Navigator.pop(context);
     } finally {
-      if (mounted) setState(() { _isProcessing = false; });
+      if (mounted) setState(() => _isProcessing = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    bool showSaveButton = !_isProcessing && 
-                          _aiSummary.isNotEmpty && 
-                          !_aiSummary.contains("Point camera") &&
-                          !_aiSummary.contains("Error");
-
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Scan Medication'),
-        backgroundColor: Colors.teal,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.photo_library),
-            onPressed: _isProcessing ? null : _pickFromGallery,
-            tooltip: 'Upload from Gallery',
-          )
-        ],
-      ),
-      body: Column(
+      backgroundColor: const Color(0xFF0F172A), // Dark background for camera
+      body: Stack(
         children: [
-          Expanded(
-            flex: 2,
-            child: _cameraController == null || !_cameraController!.value.isInitialized
-                ? const Center(child: CircularProgressIndicator())
-                : CameraPreview(_cameraController!),
-          ),
-          Expanded(
-            flex: 2,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              color: Colors.grey[100],
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          // Camera Preview
+          if (!_hasScanned && _cameraController != null && _cameraController!.value.isInitialized)
+            Positioned.fill(child: CameraPreview(_cameraController!)),
+
+          // Top App Bar (Overlay)
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Expanded(
-                    child: SingleChildScrollView(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text("AI Medical Summary:", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
-                          const SizedBox(height: 5),
-                          Text(_aiSummary, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
-                        ],
-                      ),
-                    ),
-                  ),
-                  if (showSaveButton)
-                    ElevatedButton.icon(
-                      onPressed: _saveToDatabase,
-                      icon: const Icon(Icons.save),
-                      label: const Text('Save Medication to App'),
-                      style: ElevatedButton.styleFrom(
-                        minimumSize: const Size.fromHeight(45),
-                        backgroundColor: Colors.teal,
-                        foregroundColor: Colors.white,
-                      ),
-                    )
+                  CircleAvatar(backgroundColor: Colors.white.withOpacity(0.2), child: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.pop(context))),
+                  const Text('Scan medication', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  CircleAvatar(backgroundColor: Colors.white.withOpacity(0.2), child: IconButton(icon: const Icon(Icons.photo_library, color: Colors.white), onPressed: _pickGallery)),
                 ],
+              ),
+            ),
+          ),
+
+          // Camera Frame Overlay (Dashed Corners)
+          if (!_hasScanned)
+            Center(
+              child: Container(
+                width: 280, height: 180,
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.tealAccent.withOpacity(0.5), width: 2),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Center(child: Text('Align label here', style: TextStyle(color: Colors.white54))),
+              ),
+            ),
+
+          // Bottom Sheet
+          Positioned(
+            bottom: 0, left: 0, right: 0,
+            child: Container(
+              height: MediaQuery.of(context).size.height * 0.45, // Takes up bottom half if scanned
+              decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.only(topLeft: Radius.circular(30), topRight: Radius.circular(30))),
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: _hasScanned ? _buildResultUI() : _buildCameraControls(),
               ),
             ),
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _isProcessing ? null : _scanImage,
-        backgroundColor: Colors.teal,
-        foregroundColor: Colors.white,
-        child: _isProcessing
-            ? const CircularProgressIndicator(color: Colors.white)
-            : const Icon(Icons.camera_alt, size: 30),
-      ),
+    );
+  }
+
+  Widget _buildCameraControls() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Text('Fit the whole label inside the frame', style: TextStyle(color: kTextDark, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 30),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            IconButton(onPressed: _pickGallery, icon: const Icon(Icons.image, size: 30, color: kTeal)),
+            GestureDetector(
+              onTap: _takePicture,
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, border: Border.all(color: kTeal, width: 4)),
+                child: const Icon(Icons.camera_alt, color: kTeal, size: 40),
+              ),
+            ),
+            IconButton(onPressed: () {}, icon: const Icon(Icons.flash_on, size: 30, color: kTeal)),
+          ],
+        )
+      ],
+    );
+  }
+
+  Widget _buildResultUI() {
+    // Parse AI string into lines
+    List<String> lines = _aiSummary.split('\n').where((s) => s.trim().isNotEmpty).toList();
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.auto_awesome, color: kTeal, size: 20),
+            const SizedBox(width: 8),
+            Text('AI medical summary', style: TextStyle(fontWeight: FontWeight.bold, color: kTextDark, fontSize: 16)),
+            if (_isProcessing) const Padding(padding: EdgeInsets.only(left: 10), child: SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2))),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Expanded(
+          child: _isProcessing 
+            ? const Center(child: Text("Extracting medical data..."))
+            : SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: lines.map((line) {
+                    if (line.contains(':')) {
+                      var parts = line.split(':');
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(parts[0], style: const TextStyle(fontWeight: FontWeight.bold, color: kTeal, fontSize: 13)),
+                            const SizedBox(height: 4),
+                            Text(parts.sublist(1).join(':').trim(), style: const TextStyle(fontSize: 16, color: kTextDark)),
+                          ],
+                        ),
+                      );
+                    }
+                    return Text(line, style: const TextStyle(fontSize: 16));
+                  }).toList(),
+                ),
+              ),
+        ),
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: _isProcessing ? null : _saveToDatabase,
+                icon: const Icon(Icons.check),
+                label: const Text('Save to my medications'),
+                style: ElevatedButton.styleFrom(backgroundColor: kTeal, foregroundColor: Colors.white, minimumSize: const Size.fromHeight(50), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25))),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton(
+            onPressed: () => setState(() { _hasScanned = false; _aiSummary = ""; }),
+            style: OutlinedButton.styleFrom(foregroundColor: kTeal, side: const BorderSide(color: kTeal), minimumSize: const Size.fromHeight(50), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25))),
+            child: const Text('Scan again'),
+          ),
+        )
+      ],
     );
   }
 }
