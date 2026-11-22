@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "921850170017",
+    "project_id": "drugtactor",
+    "storage_bucket": "drugtactor.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:921850170017:android:52bb9a0a4fba1fe6953ee0",
+        "android_client_info": {
+          "package_name": "com.example.drugtactor"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAiQSqJAtK3iNzANlUYUh5mRLCugiPCBXs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
